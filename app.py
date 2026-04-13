@@ -12,9 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
-
 st.set_page_config(page_title="AI Landing Page Optimizer", layout="wide")
-
 st.title("🚀 AI Landing Page Optimizer")
 
 
@@ -30,35 +28,13 @@ def analyze_image_with_llm(image_file):
             "Content-Type": "application/json"
         }
 
-        prompt = """
-Analyze this advertisement image and extract structured marketing information.
-
-Return JSON ONLY:
-{
-  "product": "",
-  "brand": "",
-  "headline": "",
-  "cta": "",
-  "offer": "",
-  "tone": "",
-  "audience": ""
-}
-
-Focus on:
-- visible text
-- discount/offer
-- product type
-- call-to-action
-- marketing tone
-"""
-
         data = {
             "model": "openai/gpt-4o-mini",
             "messages": [
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": prompt},
+                        {"type": "text", "text": "Extract product, offer, CTA, tone from this advertisement."},
                         {
                             "type": "image_url",
                             "image_url": {
@@ -70,16 +46,19 @@ Focus on:
             ]
         }
 
-        response = requests.post(url, headers=headers, json=data)
-        result = response.json()
+        response = requests.post(url, headers=headers, json=data, timeout=30)
 
+        if response.status_code != 200:
+            return None
+
+        result = response.json()
         return result["choices"][0]["message"]["content"]
 
-    except Exception as e:
-        return "Image analysis failed"
+    except:
+        return None
 
 
-def render_page(page, title=""):
+def render_page(page, title="", key_prefix=""):
     if title:
         st.markdown(f"### {title}")
 
@@ -88,7 +67,7 @@ def render_page(page, title=""):
     for section in page.get("sections", []):
         st.markdown(f"- {section}")
 
-    st.button(page.get("cta", "Action"))
+    st.button(page.get("cta", "Action"), key=f"{key_prefix}_cta")
 
 st.subheader("Input")
 
@@ -100,19 +79,23 @@ uploaded_image = st.file_uploader(
 
 url_input = st.text_input("Enter Website URL (optional)")
 
+
 if st.button("Generate Personalized Page"):
 
     combined_input = ad_input if ad_input else ""
 
     if uploaded_image:
-        st.info("🧠 Understanding image using AI...")
+        st.info("🧠 Analyzing image...")
 
         image_analysis = analyze_image_with_llm(uploaded_image)
 
-        st.write("📸 Image Analysis:")
-        st.write(image_analysis)
+        if image_analysis:
+            st.write("📸 Image Insights:")
+            st.write(image_analysis)
 
-        combined_input += f"\nIMAGE ANALYSIS:\n{image_analysis}"
+            combined_input += f"\nIMAGE ANALYSIS:\n{image_analysis}"
+        else:
+            st.info("ℹ️ Image parsing is experimental. Using fallback logic.")
 
 
     if url_input:
@@ -142,25 +125,20 @@ if st.button("Generate Personalized Page"):
             ]
         }
 
-    # -----------------------------
-    # AGENT FLOW
-    # -----------------------------
     analysis = analyze(combined_input, page)
     plan = plan_changes(analysis)
-    updated_page = apply_changes(page, plan)
+    updated_page = apply_changes(page, plan, analysis)
 
-    # -----------------------------
-    # OUTPUT
-    # -----------------------------
+
     st.subheader("📊 Before vs After")
 
     col1, col2 = st.columns(2)
 
     with col1:
-        render_page(page, "Original Page")
+        render_page(page, "Original Page", "original")
 
     with col2:
-        render_page(updated_page, "Optimized Page")
+        render_page(updated_page, "Optimized Page", "optimized")
 
     st.subheader("🧠 AI Change Plan")
     st.json(plan)

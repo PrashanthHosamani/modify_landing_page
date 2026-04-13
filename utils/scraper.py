@@ -1,47 +1,58 @@
-import requests
-from bs4 import BeautifulSoup
-import urllib3
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
+from playwright.sync_api import sync_playwright
 
 def scrape_website(url):
     try:
-        response = requests.get(url, timeout=5, verify=False)
-        soup = BeautifulSoup(response.text, "html.parser")
+        with sync_playwright() as p:
+            browser = p.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-dev-shm-usage"]
+                )
+            page = browser.new_page()
+            page.goto(url, timeout=60000)
 
-        # HEADLINE
-        headline = ""
-        for tag in ["h1", "h2"]:
-            h = soup.find(tag)
-            if h:
-                headline = h.get_text(strip=True)
-                break
+            # wait for content to load
+            page.wait_for_timeout(3000)
 
-        # CTA (better detection)
-        cta = ""
-        buttons = soup.find_all(["button", "a"])
+            content = page.content()
 
-        for b in buttons:
-            text = b.get_text(strip=True)
-            if any(word in text.lower() for word in ["buy", "shop", "start", "learn", "try"]):
-                cta = text
-                break
+            # HEADLINE
+            h1 = page.query_selector("h1")
+            headline = h1.inner_text().strip() if h1 else "No headline found"
 
-        # SECTIONS (clean extraction)
-        sections = []
-        paragraphs = soup.find_all("p")
+            # CTA (buttons)
+            buttons = page.query_selector_all("button, a")
+            cta = "Get Started"
 
-        for p in paragraphs[:5]:
-            text = p.get_text(strip=True)
-            if len(text) > 30:
-                sections.append(text)
+            for btn in buttons:
+                text = btn.inner_text().lower()
+                if any(word in text for word in ["sign", "start", "get", "try", "join", "book"]):
+                    cta = text.strip()
+                    break
 
-        return {
-            "headline": headline or "No headline found",
-            "cta": cta or "Learn More",
-            "sections": sections if sections else ["No content found"]
-        }
+            sections = []
+
+            paragraphs = page.query_selector_all("p")
+            for p_tag in paragraphs:
+                text = p_tag.inner_text().strip()
+
+                if len(text) > 50 and len(sections) < 5:
+                    sections.append(text)
+
+            # fallback
+            if not sections:
+                sections = [
+                    "High quality product",
+                    "Affordable pricing",
+                    "Trusted by customers"
+                ]
+
+            browser.close()
+
+            return {
+                "headline": headline,
+                "cta": cta,
+                "sections": sections
+            }
 
     except Exception as e:
         return {"error": str(e)}

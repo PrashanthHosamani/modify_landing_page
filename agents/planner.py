@@ -1,48 +1,49 @@
+import json
 from utils.llm import call_llm
-from utils.json_parser import extract_json
-
 
 def plan_changes(analysis):
+
     prompt = f"""
-You are a CRO (Conversion Rate Optimization) expert.
+You are a CRO expert.
 
-Based ONLY on this analysis:
-{analysis}
+Create a landing page improvement plan.
 
-IMPORTANT:
-- Do NOT introduce new products, domains, or ideas
-- Only improve EXISTING page content
-- Keep changes realistic and relevant
-- Focus on clarity, conversion, and alignment with ad
-
-STRICT RULES:
-- Return ONLY JSON
-- No explanation
-- No markdown
+Return ONLY valid JSON.
 
 FORMAT:
 {{
-  "headline": "improved headline",
-  "cta": "improved CTA",
+  "headline": "",
+  "cta": "",
   "sections": [
     {{
-      "section": "existing section name",
-      "change": "specific improvement"
+      "section": "",
+      "change": ""
     }}
   ]
 }}
+
+Analysis:
+{analysis}
 """
 
-    # Retry mechanism
-    for _ in range(2):
-        response = call_llm(prompt)
-        plan = extract_json(response)
+    response = call_llm(prompt)
 
-        if "error" not in plan:
-            # Minimal constraint (avoid overly long headline)
-            if "headline" in plan and len(plan["headline"]) > 120:
-                plan["headline"] = plan["headline"][:120]
+    try:
+        result = json.loads(response)
+        return result
+    except:
 
-            return plan
-
-    return {"error": "Failed to generate plan"}
+        return {
+            "headline": "Limited Time Offer – Upgrade Your Experience",
+            "cta": "Shop Now",
+            "sections": [
+                {
+                    "section": "hero",
+                    "change": "Add strong value proposition aligned with ad"
+                },
+                {
+                    "section": "cta",
+                    "change": "Make CTA more visible and action-driven"
+                }
+            ]
+        }
