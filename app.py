@@ -3,58 +3,39 @@ from agents.analyzer import analyze
 from agents.planner import plan_changes
 from agents.executor import apply_changes
 from utils.scraper import scrape_website
+from utils.llm import call_llm
 
 import base64
-import requests
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 st.set_page_config(page_title="AI Landing Page Optimizer", layout="wide")
 st.title("🚀 AI Landing Page Optimizer")
-
 
 def analyze_image_with_llm(image_file):
     try:
         image_bytes = image_file.read()
         base64_image = base64.b64encode(image_bytes).decode("utf-8")
 
-        url = "https://openrouter.ai/api/v1/chat/completions"
+        prompt = f"""
+Analyze this advertisement image.
 
-        headers = {
-            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-            "Content-Type": "application/json"
-        }
+Extract:
+- product
+- offer
+- CTA
+- tone
+- audience
 
-        data = {
-            "model": "openai/gpt-4o-mini",
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "Extract product, offer, CTA, tone from this advertisement."},
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{base64_image}"
-                            }
-                        }
-                    ]
-                }
-            ]
-        }
+If unclear, make a reasonable guess.
 
-        response = requests.post(url, headers=headers, json=data, timeout=30)
+Image (base64 sample):
+{base64_image[:1000]}
+"""
 
-        if response.status_code != 200:
-            return None
+        response = call_llm(prompt)
+        return response
 
-        result = response.json()
-        return result["choices"][0]["message"]["content"]
-
-    except:
+    except Exception as e:
+        print("IMAGE ERROR:", e)
         return None
 
 
@@ -69,6 +50,7 @@ def render_page(page, title="", key_prefix=""):
 
     st.button(page.get("cta", "Action"), key=f"{key_prefix}_cta")
 
+
 st.subheader("Input")
 
 ad_input = st.text_area("Paste Ad Content")
@@ -78,7 +60,6 @@ uploaded_image = st.file_uploader(
 )
 
 url_input = st.text_input("Enter Website URL (optional)")
-
 
 if st.button("Generate Personalized Page"):
 
@@ -105,7 +86,7 @@ if st.button("Generate Personalized Page"):
             st.warning("⚠️ Could not fetch website. Using fallback.")
             page = {
                 "headline": "Generic Product Page",
-                "cta": "Buy Now",
+                "cta": "Get Started",
                 "sections": [
                     "High quality product",
                     "Affordable pricing",
@@ -117,7 +98,7 @@ if st.button("Generate Personalized Page"):
     else:
         page = {
             "headline": "Generic Product Page",
-            "cta": "Buy Now",
+            "cta": "Get Started",
             "sections": [
                 "High quality product",
                 "Affordable pricing",
