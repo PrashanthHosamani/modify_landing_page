@@ -8,10 +8,8 @@ def scrape_website(url):
                 args=["--no-sandbox", "--disable-dev-shm-usage"]
                 )
             page = browser.new_page()
-            page.goto(url, timeout=60000)
-
-            # wait for content to load
-            page.wait_for_timeout(3000)
+            page.goto(url, timeout=60000, wait_until="domcontentloaded")
+            page.wait_for_selector("body", timeout=10000)
 
             content = page.content()
 
