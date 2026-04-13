@@ -4,10 +4,8 @@ from agents.planner import plan_changes
 from agents.executor import apply_changes
 from utils.scraper import scrape_website
 
-import pytesseract
+
 from PIL import Image
-import cv2
-import numpy as np
 import re
 
 
