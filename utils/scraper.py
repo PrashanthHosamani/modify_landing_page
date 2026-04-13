@@ -5,11 +5,16 @@ def scrape_website(url):
         with sync_playwright() as p:
             browser = p.chromium.launch(
                 headless=True,
-                args=["--no-sandbox", "--disable-dev-shm-usage"]
-                )
+                args=[  "--no-sandbox", 
+                        "--disable-dev-shm-usage",
+                        "--disable-gpu",
+                        "--disable-setuid-sandbox",
+                        "--no-zygote",
+                        "--single-process"  ]
+                    )
             page = browser.new_page()
             page.goto(url, timeout=60000, wait_until="domcontentloaded")
-            page.wait_for_selector("body", timeout=10000)
+            page.wait_for_load_state("networkidle")
 
             content = page.content()
 
@@ -22,7 +27,9 @@ def scrape_website(url):
             cta = "Get Started"
 
             for btn in buttons:
-                text = btn.inner_text().lower()
+                text = btn.inner_text()
+                if text:
+                    text = text.lower()
                 if any(word in text for word in ["sign", "start", "get", "try", "join", "book"]):
                     cta = text.strip()
                     break
