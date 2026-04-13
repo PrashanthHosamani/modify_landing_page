@@ -4,50 +4,80 @@ from agents.planner import plan_changes
 from agents.executor import apply_changes
 from utils.scraper import scrape_website
 
+import base64
+import requests
+import os
+from dotenv import load_dotenv
 
-from PIL import Image
-import re
+load_dotenv()
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 
 st.set_page_config(page_title="AI Landing Page Optimizer", layout="wide")
 
-st.title("AI Landing Page Optimizer")
+st.title("🚀 AI Landing Page Optimizer")
 
 
-def extract_text_from_image(image_file):
-    image = Image.open(image_file)
-    img = np.array(image)
+def analyze_image_with_llm(image_file):
+    try:
+        image_bytes = image_file.read()
+        base64_image = base64.b64encode(image_bytes).decode("utf-8")
 
-    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        url = "https://openrouter.ai/api/v1/chat/completions"
 
-    texts = []
+        headers = {
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Content-Type": "application/json"
+        }
 
-    # 1. Raw
-    texts.append(pytesseract.image_to_string(img_rgb))
+        prompt = """
+Analyze this advertisement image and extract structured marketing information.
 
-    # 2. Grayscale
-    gray = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2GRAY)
-    texts.append(pytesseract.image_to_string(gray))
+Return JSON ONLY:
+{
+  "product": "",
+  "brand": "",
+  "headline": "",
+  "cta": "",
+  "offer": "",
+  "tone": "",
+  "audience": ""
+}
 
-    # 3. Adaptive threshold
-    thresh = cv2.adaptiveThreshold(
-        gray, 255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY,
-        11, 2
-    )
-    texts.append(pytesseract.image_to_string(thresh))
+Focus on:
+- visible text
+- discount/offer
+- product type
+- call-to-action
+- marketing tone
+"""
 
-    combined = "\n".join(texts)
+        data = {
+            "model": "openai/gpt-4o-mini",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{base64_image}"
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
 
-    # Clean text
-    cleaned = []
-    for line in combined.split("\n"):
-        line = line.strip()
-        if len(line) > 3:
-            cleaned.append(line)
+        response = requests.post(url, headers=headers, json=data)
+        result = response.json()
 
-    return "\n".join(cleaned)
+        return result["choices"][0]["message"]["content"]
+
+    except Exception as e:
+        return "Image analysis failed"
+
 
 def render_page(page, title=""):
     if title:
@@ -70,53 +100,19 @@ uploaded_image = st.file_uploader(
 
 url_input = st.text_input("Enter Website URL (optional)")
 
-
 if st.button("Generate Personalized Page"):
 
     combined_input = ad_input if ad_input else ""
 
-
     if uploaded_image:
-        try:
-            extracted_text = extract_text_from_image(uploaded_image)
+        st.info("🧠 Understanding image using AI...")
 
-            st.info("📸 Extracted Text from Image:")
-            st.write(extracted_text)
+        image_analysis = analyze_image_with_llm(uploaded_image)
 
-            text_lower = extracted_text.lower()
+        st.write("📸 Image Analysis:")
+        st.write(image_analysis)
 
-            # SIGNAL DETECTION
-            offer = ""
-            percent_match = re.search(r"\d+%", text_lower)
-            if percent_match:
-                offer = percent_match.group()
-
-            if "sale" in text_lower:
-                offer = (offer + " sale").strip()
-
-            if "off" in text_lower:
-                offer = (offer + " off").strip()
-
-            cta = ""
-            if "shop" in text_lower:
-                cta = "Shop Now"
-            elif "buy" in text_lower:
-                cta = "Buy Now"
-
-            # STRUCTURED INPUT (IMPORTANT)
-            structured_context = f"""
-AD CONTENT:
-{extracted_text}
-
-DETECTED SIGNALS:
-Offer: {offer if offer else "Unknown discount"}
-CTA: {cta if cta else "Not clear"}
-"""
-
-            combined_input += structured_context
-
-        except Exception as e:
-            st.warning("⚠️ Image processing failed")
+        combined_input += f"\nIMAGE ANALYSIS:\n{image_analysis}"
 
 
     if url_input:
@@ -146,12 +142,16 @@ CTA: {cta if cta else "Not clear"}
             ]
         }
 
-
+    # -----------------------------
+    # AGENT FLOW
+    # -----------------------------
     analysis = analyze(combined_input, page)
     plan = plan_changes(analysis)
     updated_page = apply_changes(page, plan)
 
-
+    # -----------------------------
+    # OUTPUT
+    # -----------------------------
     st.subheader("📊 Before vs After")
 
     col1, col2 = st.columns(2)
